@@ -1,0 +1,12 @@
+[package]
+name = "ipp"
+version = "0.0.1"
+authors = ["Peter Jin <peterhaijin@gmail.com>"]
+
+[lib]
+name = "ipp"
+path = "src/lib.rs"
+
+[dependencies]
+libc = "*"
+icc_link = { path = "../libicc_link" }
