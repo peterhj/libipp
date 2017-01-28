@@ -166,6 +166,8 @@ pub struct IppImageDownsamplePyramid<T> where T: Copy {
 
 impl IppImageDownsamplePyramid<u8> {
   pub fn new(src_width: usize, src_height: usize, dst_width: usize, dst_height: usize) -> Self {
+    assert!(src_width >= dst_width);
+    assert!(src_height >= dst_height);
     let mut bufs = vec![];
     let mut ops = vec![];
     bufs.push(IppImageBuf::<u8>::alloc(src_width, src_height));
