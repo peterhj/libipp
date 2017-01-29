@@ -5,6 +5,7 @@ use ffi::*;
 
 use std::marker::{PhantomData};
 //use std::ops::{Deref, DerefMut};
+use std::ptr::{null};
 
 pub mod ffi;
 
@@ -93,6 +94,7 @@ impl IppImageBuf<u8> {
 
 pub struct IppImageResizeLinear<T> where T: Copy {
   spec: IppTemporalBuf<u8>,
+  bord: IppTemporalBuf<u8>,
   buf:  IppTemporalBuf<u8>,
   src:  (usize, usize),
   dst:  (usize, usize),
@@ -112,7 +114,6 @@ impl IppImageResizeLinear<u8> {
         &mut init_buf_size as *mut _,
     ) };
     assert!(status.is_ok());
-    assert_eq!(0, init_buf_size);
     let mut spec = IppTemporalBuf::<u8>::alloc(spec_size as _);
     let status = unsafe { ippiResizeLinearInit_8u(
         IppiSize{width: src_width as _, height: src_height as _},
@@ -120,6 +121,14 @@ impl IppImageResizeLinear<u8> {
         spec.as_mut_ptr() as *mut _,
     ) };
     assert!(status.is_ok());
+    let mut border_size = IppiBorderSize::default();
+    let status = unsafe { ippiResizeGetBorderSize_8u(
+        spec.as_ptr() as *const IppiResizeSpec_32f,
+        &mut border_size as *mut _,
+    ) };
+    assert!(status.is_ok());
+    let border_circum = border_size.border_left + border_size.border_top + border_size.border_right + border_size.border_bottom;
+    let bord = IppTemporalBuf::<u8>::alloc(border_circum as _);
     let mut buf_size = 0;
     let status = unsafe { ippiResizeGetBufferSize_8u(
         spec.as_ptr() as *const IppiResizeSpec_32f,
@@ -131,6 +140,7 @@ impl IppImageResizeLinear<u8> {
     let buf = IppTemporalBuf::<u8>::alloc(buf_size as _);
     IppImageResizeLinear{
       spec: spec,
+      bord: bord,
       buf:  buf,
       src:  (src_width, src_height),
       dst:  (dst_width, dst_height),
@@ -143,6 +153,8 @@ impl IppImageResizeLinear<u8> {
     assert_eq!(self.src.1, src.height);
     assert_eq!(self.dst.0, dst.width);
     assert_eq!(self.dst.1, dst.height);
+    /*println!("DEBUG: ipp: resize: {} x {} ({}) -> {} x {} ({})",
+        src.width, src.height, src.pitch, dst.width, dst.height, dst.pitch);*/
     let status = unsafe { ippiResizeLinear_8u_C1R(
         src.ptr,
         src.pitch as _,
@@ -150,6 +162,10 @@ impl IppImageResizeLinear<u8> {
         dst.pitch as _,
         IppiPoint{x: 0, y: 0},
         IppiSize{width: dst.width as _, height: dst.height as _},
+        //IppiBorderType::ippBorderDefault,
+        IppiBorderType::ippBorderRepl,
+        //self.bord.as_ptr(),
+        null(),
         self.spec.as_ptr() as *const IppiResizeSpec_32f,
         self.buf.as_mut_ptr(),
     ) };
@@ -173,7 +189,7 @@ impl IppImageDownsamplePyramid<u8> {
     bufs.push(IppImageBuf::<u8>::alloc(src_width, src_height));
     let mut prev_width = src_width;
     let mut prev_height = src_height;
-    while prev_width > dst_width && prev_height > dst_height {
+    while prev_width > dst_width || prev_height > dst_height {
       let next_width = if prev_width >= 2 * dst_width {
         (prev_width + 1) / 2
       } else {
@@ -184,6 +200,8 @@ impl IppImageDownsamplePyramid<u8> {
       } else {
         dst_height
       };
+      /*println!("DEBUG: ipp: pyramid: level: {} x {} -> {} x {}",
+          prev_width, prev_height, next_width, next_height);*/
       bufs.push(IppImageBuf::<u8>::alloc(next_width, next_height));
       ops.push(IppImageResizeLinear::<u8>::new(prev_width, prev_height, next_width, next_height));
       prev_width = next_width;
