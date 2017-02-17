@@ -40,6 +40,30 @@ impl IppTemporalBuf<u8> {
   }
 }
 
+pub fn ipp_copy2d_u8(
+    width: usize, height: usize,
+    src_offset_x: usize, src_offset_y: usize, src_pitch: usize, src: &[u8],
+    dst_offset_x: usize, dst_offset_y: usize, dst_pitch: usize, dst: &mut [u8])
+{
+  assert!(src_offset_x <= src_pitch);
+  assert!(src_pitch * src_offset_y <= src.len());
+  assert!(width <= src_pitch);
+  assert!(dst_offset_x <= dst_pitch);
+  assert!(dst_pitch * dst_offset_y <= dst.len());
+  assert!(width <= dst_pitch);
+  let src_offset = src_offset_x + src_pitch * src_offset_y;
+  let dst_offset = dst_offset_x + dst_pitch * dst_offset_y;
+  // TODO(20170217): do more checking to ensure no out of bounds.
+  let status = unsafe { ippiCopy_8u_C1R(
+      src.as_ptr().offset(src_offset as isize),
+      src_pitch as _,
+      dst.as_mut_ptr().offset(dst_offset as isize),
+      dst_pitch as _,
+      IppiSize{width: width as _, height: height as _},
+  ) };
+  assert!(status.is_ok());
+}
+
 pub struct IppImageBuf<T> where T: Copy {
   ptr:      *mut T,
   width:    usize,
@@ -79,6 +103,20 @@ impl IppImageBuf<u8> {
     assert!(status.is_ok());
   }
 
+  pub fn load_packed(&mut self, ext_width: usize, ext_height: usize, ext_buf: &[u8]) {
+    assert!(ext_width <= self.width);
+    assert!(ext_height <= self.height);
+    assert!(ext_buf.len() <= self.width * self.height);
+    let status = unsafe { ippiCopy_8u_C1R(
+        ext_buf.as_ptr(),
+        ext_width as _,
+        self.ptr,
+        self.pitch as _,
+        IppiSize{width: ext_width as _, height: ext_height as _},
+    ) };
+    assert!(status.is_ok());
+  }
+
   pub fn store(&self, ext_buf: &mut [u8]) {
     assert_eq!(ext_buf.len(), self.width * self.height);
     let status = unsafe { ippiCopy_8u_C1R(
@@ -87,6 +125,20 @@ impl IppImageBuf<u8> {
         ext_buf.as_mut_ptr(),
         self.width as _,
         IppiSize{width: self.width as _, height: self.height as _},
+    ) };
+    assert!(status.is_ok());
+  }
+
+  pub fn store_packed(&self, ext_width: usize, ext_height: usize, ext_buf: &mut [u8]) {
+    assert!(ext_width <= self.width);
+    assert!(ext_height <= self.height);
+    assert!(ext_buf.len() <= self.width * self.height);
+    let status = unsafe { ippiCopy_8u_C1R(
+        self.ptr,
+        self.pitch as _,
+        ext_buf.as_mut_ptr(),
+        ext_width as _,
+        IppiSize{width: ext_width as _, height: ext_height as _},
     ) };
     assert!(status.is_ok());
   }
@@ -186,10 +238,10 @@ impl IppImageResize<u8> {
   }
 
   pub fn resize(&mut self, src: &IppImageBuf<u8>, dst: &mut IppImageBuf<u8>) {
-    assert_eq!(self.src.0, src.width);
-    assert_eq!(self.src.1, src.height);
-    assert_eq!(self.dst.0, dst.width);
-    assert_eq!(self.dst.1, dst.height);
+    assert!(self.src.0 <= src.width);
+    assert!(self.src.1 <= src.height);
+    assert!(self.dst.0 <= dst.width);
+    assert!(self.dst.1 <= dst.height);
     /*println!("DEBUG: ipp: resize: {} x {} ({}) -> {} x {} ({})",
         src.width, src.height, src.pitch, dst.width, dst.height, dst.pitch);*/
     match self.kind {
@@ -200,7 +252,8 @@ impl IppImageResize<u8> {
             dst.ptr,
             dst.pitch as _,
             IppiPoint{x: 0, y: 0},
-            IppiSize{width: dst.width as _, height: dst.height as _},
+            //IppiSize{width: dst.width as _, height: dst.height as _},
+            IppiSize{width: self.dst.0 as _, height: self.dst.1 as _},
             //IppiBorderType::ippBorderDefault,
             IppiBorderType::ippBorderRepl,
             //self.bord.as_ptr(),
@@ -217,7 +270,8 @@ impl IppImageResize<u8> {
             dst.ptr,
             dst.pitch as _,
             IppiPoint{x: 0, y: 0},
-            IppiSize{width: dst.width as _, height: dst.height as _},
+            //IppiSize{width: dst.width as _, height: dst.height as _},
+            IppiSize{width: self.dst.0 as _, height: self.dst.1 as _},
             IppiBorderType::ippBorderRepl,
             null(),
             self.spec.as_ptr() as *const IppiResizeSpec_32f,
@@ -232,7 +286,8 @@ impl IppImageResize<u8> {
             dst.ptr,
             dst.pitch as _,
             IppiPoint{x: 0, y: 0},
-            IppiSize{width: dst.width as _, height: dst.height as _},
+            //IppiSize{width: dst.width as _, height: dst.height as _},
+            IppiSize{width: self.dst.0 as _, height: self.dst.1 as _},
             IppiBorderType::ippBorderRepl,
             null(),
             self.spec.as_ptr() as *const IppiResizeSpec_32f,
