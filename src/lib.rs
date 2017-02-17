@@ -92,35 +92,71 @@ impl IppImageBuf<u8> {
   }
 }
 
-pub struct IppImageResizeLinear<T> where T: Copy {
+#[derive(Clone, Copy)]
+pub enum IppImageResizeKind {
+  Linear,
+  Cubic{b: f32, c: f32},
+  Lanczos{nlobes: usize},
+}
+
+pub struct IppImageResize<T> where T: Copy {
   spec: IppTemporalBuf<u8>,
   bord: IppTemporalBuf<u8>,
   buf:  IppTemporalBuf<u8>,
+  kind: IppImageResizeKind,
   src:  (usize, usize),
   dst:  (usize, usize),
   _mrk: PhantomData<fn (T)>,
 }
 
-impl IppImageResizeLinear<u8> {
-  pub fn new(src_width: usize, src_height: usize, dst_width: usize, dst_height: usize) -> Self {
+impl IppImageResize<u8> {
+  pub fn new(kind: IppImageResizeKind, src_width: usize, src_height: usize, dst_width: usize, dst_height: usize) -> Self {
+    let interp_ty = match kind {
+      IppImageResizeKind::Linear        => IppiInterpolationType::ippLinear,
+      IppImageResizeKind::Cubic{..}     => IppiInterpolationType::ippCubic,
+      IppImageResizeKind::Lanczos{..}   => IppiInterpolationType::ippLanczos,
+    };
     let mut spec_size = 0;
     let mut init_buf_size = 0;
     let status = unsafe { ippiResizeGetSize_8u(
         IppiSize{width: src_width as _, height: src_height as _},
         IppiSize{width: dst_width as _, height: dst_height as _},
-        IppiInterpolationType::ippLinear,
+        //IppiInterpolationType::ippLinear,
+        interp_ty,
         0, // antialiasing.
         &mut spec_size as *mut _,
         &mut init_buf_size as *mut _,
     ) };
     assert!(status.is_ok());
     let mut spec = IppTemporalBuf::<u8>::alloc(spec_size as _);
-    let status = unsafe { ippiResizeLinearInit_8u(
-        IppiSize{width: src_width as _, height: src_height as _},
-        IppiSize{width: dst_width as _, height: dst_height as _},
-        spec.as_mut_ptr() as *mut _,
-    ) };
-    assert!(status.is_ok());
+    match kind {
+      IppImageResizeKind::Linear        => {
+        let status = unsafe { ippiResizeLinearInit_8u(
+            IppiSize{width: src_width as _, height: src_height as _},
+            IppiSize{width: dst_width as _, height: dst_height as _},
+            spec.as_mut_ptr() as *mut _,
+        ) };
+        assert!(status.is_ok());
+      }
+      IppImageResizeKind::Cubic{b, c}     => {
+        let status = unsafe { ippiResizeCubicInit_8u(
+            IppiSize{width: src_width as _, height: src_height as _},
+            IppiSize{width: dst_width as _, height: dst_height as _},
+            b, c,
+            spec.as_mut_ptr() as *mut _,
+        ) };
+        assert!(status.is_ok());
+      }
+      IppImageResizeKind::Lanczos{nlobes} => {
+        let status = unsafe { ippiResizeLanczosInit_8u(
+            IppiSize{width: src_width as _, height: src_height as _},
+            IppiSize{width: dst_width as _, height: dst_height as _},
+            nlobes as _,
+            spec.as_mut_ptr() as *mut _,
+        ) };
+        assert!(status.is_ok());
+      }
+    }
     let mut border_size = IppiBorderSize::default();
     let status = unsafe { ippiResizeGetBorderSize_8u(
         spec.as_ptr() as *const IppiResizeSpec_32f,
@@ -138,10 +174,11 @@ impl IppImageResizeLinear<u8> {
     ) };
     assert!(status.is_ok());
     let buf = IppTemporalBuf::<u8>::alloc(buf_size as _);
-    IppImageResizeLinear{
+    IppImageResize{
       spec: spec,
       bord: bord,
       buf:  buf,
+      kind: kind,
       src:  (src_width, src_height),
       dst:  (dst_width, dst_height),
       _mrk: PhantomData,
@@ -155,27 +192,61 @@ impl IppImageResizeLinear<u8> {
     assert_eq!(self.dst.1, dst.height);
     /*println!("DEBUG: ipp: resize: {} x {} ({}) -> {} x {} ({})",
         src.width, src.height, src.pitch, dst.width, dst.height, dst.pitch);*/
-    let status = unsafe { ippiResizeLinear_8u_C1R(
-        src.ptr,
-        src.pitch as _,
-        dst.ptr,
-        dst.pitch as _,
-        IppiPoint{x: 0, y: 0},
-        IppiSize{width: dst.width as _, height: dst.height as _},
-        //IppiBorderType::ippBorderDefault,
-        IppiBorderType::ippBorderRepl,
-        //self.bord.as_ptr(),
-        null(),
-        self.spec.as_ptr() as *const IppiResizeSpec_32f,
-        self.buf.as_mut_ptr(),
-    ) };
-    assert!(status.is_ok());
+    match self.kind {
+      IppImageResizeKind::Linear        => {
+        let status = unsafe { ippiResizeLinear_8u_C1R(
+            src.ptr,
+            src.pitch as _,
+            dst.ptr,
+            dst.pitch as _,
+            IppiPoint{x: 0, y: 0},
+            IppiSize{width: dst.width as _, height: dst.height as _},
+            //IppiBorderType::ippBorderDefault,
+            IppiBorderType::ippBorderRepl,
+            //self.bord.as_ptr(),
+            null(),
+            self.spec.as_ptr() as *const IppiResizeSpec_32f,
+            self.buf.as_mut_ptr(),
+        ) };
+        assert!(status.is_ok());
+      }
+      IppImageResizeKind::Cubic{..}     => {
+        let status = unsafe { ippiResizeCubic_8u_C1R(
+            src.ptr,
+            src.pitch as _,
+            dst.ptr,
+            dst.pitch as _,
+            IppiPoint{x: 0, y: 0},
+            IppiSize{width: dst.width as _, height: dst.height as _},
+            IppiBorderType::ippBorderRepl,
+            null(),
+            self.spec.as_ptr() as *const IppiResizeSpec_32f,
+            self.buf.as_mut_ptr(),
+        ) };
+        assert!(status.is_ok());
+      }
+      IppImageResizeKind::Lanczos{..}   => {
+        let status = unsafe { ippiResizeLanczos_8u_C1R(
+            src.ptr,
+            src.pitch as _,
+            dst.ptr,
+            dst.pitch as _,
+            IppiPoint{x: 0, y: 0},
+            IppiSize{width: dst.width as _, height: dst.height as _},
+            IppiBorderType::ippBorderRepl,
+            null(),
+            self.spec.as_ptr() as *const IppiResizeSpec_32f,
+            self.buf.as_mut_ptr(),
+        ) };
+        assert!(status.is_ok());
+      }
+    }
   }
 }
 
 pub struct IppImageDownsamplePyramid<T> where T: Copy {
   bufs: Vec<IppImageBuf<T>>,
-  ops:  Vec<IppImageResizeLinear<T>>,
+  ops:  Vec<IppImageResize<T>>,
   src:  (usize, usize),
   dst:  (usize, usize),
 }
@@ -203,7 +274,7 @@ impl IppImageDownsamplePyramid<u8> {
       /*println!("DEBUG: ipp: pyramid: level: {} x {} -> {} x {}",
           prev_width, prev_height, next_width, next_height);*/
       bufs.push(IppImageBuf::<u8>::alloc(next_width, next_height));
-      ops.push(IppImageResizeLinear::<u8>::new(prev_width, prev_height, next_width, next_height));
+      ops.push(IppImageResize::<u8>::new(IppImageResizeKind::Linear, prev_width, prev_height, next_width, next_height));
       prev_width = next_width;
       prev_height = next_height;
     }

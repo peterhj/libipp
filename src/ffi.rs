@@ -108,7 +108,11 @@ extern "C" {
 
   pub fn ippiResizeGetSize_8u(src_size: IppiSize, dst_size: IppiSize, interpolation: IppiInterpolationType, antialiasing: u32, spec_size: *mut c_int, init_buf_size: *mut c_int) -> IppStatus;
   pub fn ippiResizeLinearInit_8u(src_size: IppiSize, dst_size: IppiSize, spec: *mut IppiResizeSpec_32f) -> IppStatus;
+  pub fn ippiResizeCubicInit_8u(src_size: IppiSize, dst_size: IppiSize, value_b: f32, value_c: f32, spec: *mut IppiResizeSpec_32f) -> IppStatus;
+  pub fn ippiResizeLanczosInit_8u(src_size: IppiSize, dst_size: IppiSize, num_lobes: u32, spec: *mut IppiResizeSpec_32f) -> IppStatus;
   pub fn ippiResizeGetBufferSize_8u(spec: *const IppiResizeSpec_32f, dst_size: IppiSize, num_channels: u32, buf_size: *mut c_int) -> IppStatus;
   pub fn ippiResizeGetBorderSize_8u(spec: *const IppiResizeSpec_32f, border_size: *mut IppiBorderSize) -> IppStatus;
   pub fn ippiResizeLinear_8u_C1R(src: *const u8, src_pitch: i32, dst: *mut u8, dst_pitch: i32, dst_offset: IppiPoint, dst_size: IppiSize, border: IppiBorderType, border_value: *const u8, spec: *const IppiResizeSpec_32f, buf: *mut u8) -> IppStatus;
+  pub fn ippiResizeCubic_8u_C1R(src: *const u8, src_pitch: i32, dst: *mut u8, dst_pitch: i32, dst_offset: IppiPoint, dst_size: IppiSize, border: IppiBorderType, border_value: *const u8, spec: *const IppiResizeSpec_32f, buf: *mut u8) -> IppStatus;
+  pub fn ippiResizeLanczos_8u_C1R(src: *const u8, src_pitch: i32, dst: *mut u8, dst_pitch: i32, dst_offset: IppiPoint, dst_size: IppiSize, border: IppiBorderType, border_value: *const u8, spec: *const IppiResizeSpec_32f, buf: *mut u8) -> IppStatus;
 }
