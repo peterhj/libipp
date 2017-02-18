@@ -153,7 +153,7 @@ pub enum IppImageResizeKind {
 
 pub struct IppImageResize<T> where T: Copy {
   spec: IppTemporalBuf<u8>,
-  bord: IppTemporalBuf<u8>,
+  //bord: IppTemporalBuf<u8>,
   buf:  IppTemporalBuf<u8>,
   kind: IppImageResizeKind,
   src:  (usize, usize),
@@ -191,20 +191,24 @@ impl IppImageResize<u8> {
         assert!(status.is_ok());
       }
       IppImageResizeKind::Cubic{b, c}     => {
+        let mut init_buf = IppTemporalBuf::<u8>::alloc(init_buf_size as _);
         let status = unsafe { ippiResizeCubicInit_8u(
             IppiSize{width: src_width as _, height: src_height as _},
             IppiSize{width: dst_width as _, height: dst_height as _},
             b, c,
             spec.as_mut_ptr() as *mut _,
+            init_buf.as_mut_ptr(),
         ) };
         assert!(status.is_ok());
       }
       IppImageResizeKind::Lanczos{nlobes} => {
+        let mut init_buf = IppTemporalBuf::<u8>::alloc(init_buf_size as _);
         let status = unsafe { ippiResizeLanczosInit_8u(
             IppiSize{width: src_width as _, height: src_height as _},
             IppiSize{width: dst_width as _, height: dst_height as _},
             nlobes as _,
             spec.as_mut_ptr() as *mut _,
+            init_buf.as_mut_ptr(),
         ) };
         assert!(status.is_ok());
       }
@@ -215,8 +219,8 @@ impl IppImageResize<u8> {
         &mut border_size as *mut _,
     ) };
     assert!(status.is_ok());
-    let border_circum = border_size.border_left + border_size.border_top + border_size.border_right + border_size.border_bottom;
-    let bord = IppTemporalBuf::<u8>::alloc(border_circum as _);
+    /*let border_circum = border_size.border_left + border_size.border_top + border_size.border_right + border_size.border_bottom;
+    let bord = IppTemporalBuf::<u8>::alloc(border_circum as _);*/
     let mut buf_size = 0;
     let status = unsafe { ippiResizeGetBufferSize_8u(
         spec.as_ptr() as *const IppiResizeSpec_32f,
@@ -228,7 +232,7 @@ impl IppImageResize<u8> {
     let buf = IppTemporalBuf::<u8>::alloc(buf_size as _);
     IppImageResize{
       spec: spec,
-      bord: bord,
+      //bord: bord,
       buf:  buf,
       kind: kind,
       src:  (src_width, src_height),
